@@ -4,6 +4,21 @@
 
 服务只负责审核和评论，不负责批准、阻断或判断是否允许合并。
 
+## 运行模式
+
+| 模式 | 职责 | 入口 | 数据库与队列 |
+| --- | --- | --- | --- |
+| 服务模式 | Webhook、统一审核记录页面、后台执行审核 | `npm run dev` / `npm start` / Compose | 使用 SQLite 与内部队列 |
+| GitLab Runner 模式 | 一次性审核、MR 评论、飞书通知，完成后退出 | `npm run review` / `npm run review:prod` | 不初始化数据库、队列、Worker 或 HTTP 服务 |
+
+Runner 镜像使用 `docker build --target runner -t code-review:runner .` 构建；默认镜像和 Compose 继续使用服务模式。Runner 不需要 Webhook、3000 端口或 `data` 挂载。
+
+从零部署请看 [GitLab CI/CD Runner 完整部署手册](docs/gitlab-runner-deployment.md)，涵盖 Runner 创建注册、镜像发布、私有镜像认证、变量配置、业务 CI 接入、验收、更新回滚和排障。
+
+程序行为与变量速查见 [GitLab Runner 模式](docs/gitlab-runner.md)。没有其他 CI Job 时使用 [完整独立 CI 示例](ci/gitlab-code-review.standalone.yml)；已有流水线时使用 [增量 Job 模板](ci/gitlab-code-review.yml)。配置应放到被审核业务仓库的 `.gitlab-ci.yml`。
+
+同一项目选择一种触发方式，避免 Webhook 和 MR Pipeline 同时发起审核。
+
 ## 工程目录
 
 - `src/domain`：任务模型与审核结果规则。
@@ -13,6 +28,7 @@
 - `src/bootstrap`、`src/config`、`src/cli`：依赖装配、配置、维护命令。
 - `db/migrations`：按版本维护的数据库结构 SQL；`public`：页面样式。
 - `test`：按模块职责组织的测试；`docs`：设计与维护文档。
+- `ci`：GitLab MR Pipeline 审核 Job 模板。
 
 完整目录和依赖约定见 [工程目录规范](docs/project-structure.md)，数据库变更约定见 [数据库脚本规范](db/README.md)。
 
@@ -107,6 +123,8 @@ npm start
 构建仅输出源码到 `dist/`，入口为 `dist/server.js`。部署时同时保留 `db/`、`public/` 和 `prompts/` 资源目录。
 
 服务启动时自动执行待应用的数据库迁移；也可以预先独立运行 `npm run db:migrate`（源码环境）或 `npm run db:migrate:prod`（构建后）。已有数据库保留原有数据并补齐版本记录与索引。
+
+以上数据库迁移仅针对服务模式；Runner 入口不加载数据库模块。可执行 `npm run test:runner` 离线验证无数据库的 CLI 流程。
 
 线上 `docker run --env-file`、服务器配置文件、数据挂载及更新流程见 [线上部署说明](docs/deployment.md)，配置模板为 [deploy/production.env.example](deploy/production.env.example)。
 

@@ -18,6 +18,8 @@ export interface CodexRunnerConfig {
   promptFile: string;
   timeoutMs: number;
   maxOutputBytes: number;
+  isolatedEnvironment?: boolean;
+  configDirectory?: string;
 }
 
 export class CodexRunner implements CodexPort {
@@ -34,7 +36,15 @@ export class CodexRunner implements CodexPort {
     if (this.config.profile) args.push('--profile', this.config.profile);
     if (this.config.ephemeral) args.push('--ephemeral');
     if (this.config.outputSchema) args.push('--output-schema', this.config.outputSchema);
-    const env = { ...process.env };
+    const env: NodeJS.ProcessEnv = this.config.isolatedEnvironment
+      ? Object.fromEntries(Object.entries(process.env).filter(([name]) => [
+        'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'CODEX_HOME',
+        'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+        'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
+        'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS',
+      ].includes(name)))
+      : { ...process.env };
+    if (this.config.configDirectory) env.CODEX_HOME = this.config.configDirectory;
     if (this.config.apiKey) {
       // Use explicit API credentials instead of inheriting a desktop login or provider.
       // The key is passed only through the environment, never command-line arguments.

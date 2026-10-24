@@ -1,5 +1,7 @@
 # 线上部署与配置注入
 
+本文说明常驻服务模式。若部署目标是 GitLab CI/CD 中的一次性审核任务，请构建 `Dockerfile --target runner`，并参考 [GitLab Runner 模式](gitlab-runner.md)；该模式无需启动 Web 服务、挂载数据目录或配置数据库。
+
 本项目通过环境变量读取 GitLab、模型 API、飞书及数据目录配置。部署时使用服务器的配置文件注入容器；镜像中不保存密钥，也不需要复制本地开发 `.env` 到镜像。
 
 ## docker run

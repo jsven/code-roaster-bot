@@ -28,6 +28,7 @@ export class GitLabClient implements GitLabPort {
     const value = await response.json() as {
       title?: string; web_url?: string; sha?: string; source_project_id?: number | string; target_project_id?: number | string;
       diff_refs?: { head_sha?: string; base_sha?: string };
+      author?: { username?: string; name?: string };
     };
     const headSha = value.diff_refs?.head_sha ?? value.sha;
     const baseSha = value.diff_refs?.base_sha;
@@ -41,6 +42,7 @@ export class GitLabClient implements GitLabPort {
       baseSha,
       sourceProjectId: String(value.source_project_id),
       targetProjectId: String(value.target_project_id),
+      author: value.author?.username ?? value.author?.name,
     };
   }
 

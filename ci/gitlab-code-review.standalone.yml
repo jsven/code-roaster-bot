@@ -1,0 +1,34 @@
+# Complete root .gitlab-ci.yml for a repository that only runs AI review.
+# Configure CODE_REVIEW_IMAGE and the other credentials as CI/CD Variables.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - when: never
+
+stages:
+  - review
+
+code-review:
+  stage: review
+  image:
+    name: "$CODE_REVIEW_IMAGE"
+    entrypoint: [""]
+  tags:
+    - code-review
+  needs: []
+  dependencies: []
+  before_script: []
+  after_script: []
+  cache: []
+  variables:
+    GIT_DEPTH: "0"
+    GIT_SUBMODULE_STRATEGY: none
+    GIT_LFS_SKIP_SMUDGE: "1"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_MERGE_REQUEST_PROJECT_ID'
+    - when: never
+  script:
+    - node /app/dist/cli/review.js
+  timeout: 20m
+  interruptible: true
+  allow_failure: true

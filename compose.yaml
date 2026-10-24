@@ -2,6 +2,7 @@ services:
   code-review:
     build:
       context: .
+      target: service
     image: code-review:local
     init: true
     env_file:

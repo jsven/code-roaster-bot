@@ -5,11 +5,8 @@ export type CodexSandbox = 'read-only' | 'workspace-write' | 'danger-full-access
 export type CodexApprovalPolicy = 'untrusted' | 'on-failure' | 'on-request' | 'never';
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
-export interface AppConfig {
-  server: { host: string; port: number };
-  databasePath: string;
-  workspaceRoot: string;
-  gitlab: { baseUrl: string; token: string; webhookSecret: string };
+export interface ReviewRuntimeConfig {
+  gitlab: { baseUrl: string; token: string };
   codex: {
     command: string;
     args: string[];
@@ -33,6 +30,13 @@ export interface AppConfig {
     minSeverity: Severity;
     timeoutMs: number;
   };
+}
+
+export interface AppConfig extends ReviewRuntimeConfig {
+  server: { host: string; port: number };
+  databasePath: string;
+  workspaceRoot: string;
+  gitlab: ReviewRuntimeConfig['gitlab'] & { webhookSecret: string };
 }
 
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
@@ -83,7 +87,7 @@ const reasoningEffort = (value: string | undefined): CodexReasoningEffort => {
   throw new Error('CODEX_REASONING_EFFORT must be low, medium, high, or xhigh');
 };
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+export function loadReviewRuntimeConfig(env: NodeJS.ProcessEnv = process.env): ReviewRuntimeConfig {
   const feishuEnabled = bool(env.FEISHU_ENABLED);
   const args = (env.CODEX_ARGS ?? 'exec').split(/\s+/).filter(Boolean);
   const feishuUrl = env.FEISHU_WEBHOOK_URL?.trim() || undefined;
@@ -100,16 +104,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   return {
-    server: {
-      host: env.HOST?.trim() || '0.0.0.0',
-      port: integer(env, 'PORT', 3000),
-    },
-    databasePath: path.resolve(env.DATABASE_PATH?.trim() || './data/reviews.db'),
-    workspaceRoot: path.resolve(env.WORKSPACE_ROOT?.trim() || './data/workspaces'),
     gitlab: {
       baseUrl: (env.GITLAB_BASE_URL?.trim() || 'https://gitlab.com').replace(/\/$/, ''),
       token: required(env, 'GITLAB_TOKEN'),
-      webhookSecret: required(env, 'GITLAB_WEBHOOK_SECRET'),
     },
     codex: {
       command: env.CODEX_COMMAND?.trim() || 'codex',
@@ -134,5 +131,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       minSeverity: severity(env.FEISHU_MIN_SEVERITY),
       timeoutMs: integer(env, 'FEISHU_TIMEOUT_MS', 10_000),
     },
+  };
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const runtime = loadReviewRuntimeConfig(env);
+  return {
+    ...runtime,
+    server: {
+      host: env.HOST?.trim() || '0.0.0.0',
+      port: integer(env, 'PORT', 3000),
+    },
+    databasePath: path.resolve(env.DATABASE_PATH?.trim() || './data/reviews.db'),
+    workspaceRoot: path.resolve(env.WORKSPACE_ROOT?.trim() || './data/workspaces'),
+    gitlab: { ...runtime.gitlab, webhookSecret: required(env, 'GITLAB_WEBHOOK_SECRET') },
   };
 }

@@ -12,6 +12,7 @@ export interface GitLabMergeRequest {
   baseSha: string;
   sourceProjectId: string;
   targetProjectId: string;
+  author?: string;
 }
 
 export interface GitLabProject {

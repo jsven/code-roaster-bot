@@ -10,10 +10,13 @@
     "dev": "tsx src/server.ts",
     "build": "node scripts/clean-build.mjs && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
+    "review": "tsx src/cli/review.ts",
+    "review:prod": "node dist/cli/review.js",
     "db:migrate": "tsx src/cli/migrate.ts",
     "db:migrate:prod": "node dist/cli/migrate.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:runner": "npm run build && node scripts/smoke-runner.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

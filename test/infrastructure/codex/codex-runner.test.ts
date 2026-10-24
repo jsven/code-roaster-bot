@@ -1,10 +1,29 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CodexRunner } from '../../../src/infrastructure/codex/codex-runner.js';
 
 describe('CodexRunner', () => {
+  it('does not pass GitLab, Feishu, CI credentials to the isolated Runner process', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-isolation-'));
+    vi.stubEnv('GITLAB_TOKEN', 'test-gitlab-secret');
+    vi.stubEnv('CI_JOB_TOKEN', 'test-ci-secret');
+    vi.stubEnv('FEISHU_SECRET', 'test-feishu-secret');
+    try {
+      const promptFile = path.join(directory, 'prompt.md');
+      await fs.writeFile(promptFile, 'prompt');
+      const runner = new CodexRunner({
+        command: process.execPath,
+        args: ['-e', "process.stdout.write(JSON.stringify({gitlab:!!process.env.GITLAB_TOKEN,ci:!!process.env.CI_JOB_TOKEN,feishu:!!process.env.FEISHU_SECRET}))"],
+        promptFile, timeoutMs: 1000, maxOutputBytes: 1000, isolatedEnvironment: true,
+      });
+      expect(JSON.parse(await runner.run('diff'))).toEqual({ gitlab: false, ci: false, feishu: false });
+    } finally {
+      vi.unstubAllEnvs();
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
   it('passes prompt and diff to a local command and captures JSON output', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-runner-'));
     const promptFile = path.join(directory, 'prompt.md');
