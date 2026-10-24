@@ -7,6 +7,8 @@ export interface CodexRunnerConfig {
   command: string;
   args: string[];
   model?: string;
+  apiKey?: string;
+  apiBaseUrl?: string;
   reasoningEffort?: CodexReasoningEffort;
   sandbox?: CodexSandbox;
   approvalPolicy?: CodexApprovalPolicy;
@@ -28,12 +30,27 @@ export class CodexRunner implements CodexPort {
     if (this.config.model) args.push('--model', this.config.model);
     if (this.config.reasoningEffort) args.push('--config', `model_reasoning_effort="${this.config.reasoningEffort}"`);
     if (this.config.sandbox) args.push('--sandbox', this.config.sandbox);
-    if (this.config.approvalPolicy) args.push('--ask-for-approval', this.config.approvalPolicy);
+    if (this.config.approvalPolicy) args.push('--config', `approval_policy="${this.config.approvalPolicy}"`);
     if (this.config.profile) args.push('--profile', this.config.profile);
     if (this.config.ephemeral) args.push('--ephemeral');
     if (this.config.outputSchema) args.push('--output-schema', this.config.outputSchema);
+    const env = { ...process.env };
+    if (this.config.apiKey) {
+      // Use explicit API credentials instead of inheriting a desktop login or provider.
+      // The key is passed only through the environment, never command-line arguments.
+      env.CODE_REVIEW_API_KEY = this.config.apiKey;
+      const provider = 'model_providers.code_review';
+      args.push(
+        '--config', 'model_provider="code_review"',
+        '--config', `${provider}.name="Code Review API"`,
+        '--config', `${provider}.base_url=${JSON.stringify(this.config.apiBaseUrl ?? 'https://api.openai.com/v1')}`,
+        '--config', `${provider}.env_key="CODE_REVIEW_API_KEY"`,
+        '--config', `${provider}.wire_api="responses"`,
+        '--config', `${provider}.requires_openai_auth=false`,
+      );
+    }
     return new Promise<string>((resolve, reject) => {
-      const child = spawn(this.config.command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(this.config.command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
       let output = '';
       let errorOutput = '';
       let settled = false;

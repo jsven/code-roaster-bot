@@ -47,8 +47,36 @@ describe('CodexRunner', () => {
     expect(args).toContain('gpt-5.2');
     expect(args).toContain('model_reasoning_effort="xhigh"');
     expect(args).toContain('read-only');
-    expect(args).toContain('never');
+    expect(args).toContain('approval_policy="never"');
+    expect(args).not.toContain('--ask-for-approval');
+    expect(args).not.toContain('model_provider="code_review"');
     expect(args).toContain('review');
     expect(args).toContain('--ephemeral');
   });
+
+  it.each([undefined, 'https://gateway.example.com/v1'])(
+    'uses explicit API credentials from the environment without requiring a saved login: %s', async (apiBaseUrl) => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-api-'));
+      try {
+        const promptFile = path.join(directory, 'prompt.md');
+        const scriptFile = path.join(directory, 'capture.mjs');
+        await fs.writeFile(promptFile, 'prompt');
+        await fs.writeFile(scriptFile, `process.stdout.write(JSON.stringify({ args: process.argv.slice(2), key: process.env.CODE_REVIEW_API_KEY }));`);
+        const runner = new CodexRunner({
+          command: process.execPath, args: [scriptFile], promptFile, timeoutMs: 1000, maxOutputBytes: 10000,
+          apiKey: 'test-only-api-key', apiBaseUrl,
+        });
+        const output = JSON.parse(await runner.run('diff')) as { args: string[]; key: string };
+        expect(output.key).toBe('test-only-api-key');
+        expect(output.args.join(' ')).not.toContain('test-only-api-key');
+        expect(output.args).toContain('model_provider="code_review"');
+        expect(output.args).toContain(`model_providers.code_review.base_url="${apiBaseUrl ?? 'https://api.openai.com/v1'}"`);
+        expect(output.args).toContain('model_providers.code_review.env_key="CODE_REVIEW_API_KEY"');
+        expect(output.args).toContain('model_providers.code_review.wire_api="responses"');
+        expect(output.args).toContain('model_providers.code_review.requires_openai_auth=false');
+      } finally {
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });

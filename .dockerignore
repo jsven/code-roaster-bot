@@ -4,6 +4,7 @@ dist/
 .idea/
 .env
 .env.*
+deploy/*.env
 data/
 test/
 docs/

@@ -16,18 +16,86 @@
 
 完整目录和依赖约定见 [工程目录规范](docs/project-structure.md)，数据库变更约定见 [数据库脚本规范](db/README.md)。
 
-## 启动
+## 本地开发
 
-要求 Node.js 20+、Git、可执行的 `codex-cli` 和一个可访问 GitLab API 的 Token。
+支持以下两种启动方式，任选一种即可。所有命令均在项目根目录执行。
+
+| 方式 | 本机要求 | 启动命令 | 停止方式 |
+| --- | --- | --- | --- |
+| 直接运行源码 | Node.js 20+、Git、Codex CLI | `npm run dev` | 运行终端按 `Ctrl+C` |
+| Docker Compose | 已启动的 Docker Desktop 或 Docker Engine，以及 Compose | `docker compose up -d --build` | `docker compose down` |
+
+### 公共配置
+
+首次使用时准备 `.env`，已有文件则保留：
 
 ```bash
-npm install
-cp .env.example .env
-# 编辑 .env，至少配置 GITLAB_TOKEN、GITLAB_WEBHOOK_SECRET
+if [ ! -f .env ]; then
+  cp .env.example .env
+fi
+```
+
+编辑 `.env`，填写 `GITLAB_BASE_URL`、`GITLAB_TOKEN`、`GITLAB_WEBHOOK_SECRET`，以及 API Key 模式使用的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_MODEL`。API Key 模式的详细说明和可选的账号登录方式见 [API Key 与请求地址](#api-key-与请求地址)。两种启动方式使用同一份 `.env`，Docker 方式通过 Compose 的 `env_file` 注入配置。
+
+### 方式一：npm run dev
+
+本机需已安装 Node.js 20+、Git 和 Codex CLI。
+
+```bash
+# 首次使用或依赖发生变化时安装项目依赖
+npm ci
+
+# 直接运行源码，不需要先执行 npm run build
 npm run dev
 ```
 
-生产构建：
+服务在当前终端前台运行，可直接查看输出，按 `Ctrl+C` 停止。当前 `dev` 脚本未启用自动重启，修改源码或 `.env` 后，需要按 `Ctrl+C` 停止，再执行 `npm run dev`。
+
+### 方式二：Docker Compose
+
+先启动 Docker Desktop 或 Docker Engine。本机无需另外安装项目使用的 Node.js、Git、Codex CLI，这些依赖会在构建镜像时安装。
+
+```bash
+# 首次构建镜像并在后台启动服务
+docker compose up -d --build
+```
+
+查看容器状态及日志：
+
+```bash
+docker compose ps
+docker compose logs -f code-review
+```
+
+日志跟随模式下按 `Ctrl+C` 只退出日志查看，服务仍在后台运行。停止服务使用：
+
+```bash
+docker compose down
+```
+
+源码、SQL、页面样式和提示词随镜像构建，修改这些文件后重新构建并启动：
+
+```bash
+docker compose up -d --build
+```
+
+如果只修改 `.env`，重新创建容器以加载新配置：
+
+```bash
+docker compose up -d --force-recreate
+```
+
+### 访问、数据和模式切换
+
+- 默认访问 `http://localhost:3000/`，自动跳转到 `/reviews` 审核记录首页；健康检查为 `http://localhost:3000/health`。
+- 两种方式默认均将数据库放在工程的 `data/reviews.db`，仓库工作区放在 `data/workspaces`。Compose 通过 `./data:/app/data` 挂载工程数据目录，停止或重建容器后数据仍保留。
+- 切换前先停止另一种方式：从 npm 切到 Docker 先按 `Ctrl+C`；从 Docker 切到 npm 先执行 `docker compose down`。避免抢占同一端口或同时处理同一批审核任务。
+- `.env` 的 `PORT` 可调整访问端口。直接运行时服务使用该端口，Compose 将该宿主机端口映射到容器固定的 3000 端口。
+- Compose 中的数据、工作区和提示词路径使用容器内绝对路径。若配置 `CODEX_OUTPUT_SCHEMA` 或其他自定义文件路径，需要挂载对应文件并使用容器内路径。
+
+## 构建运行与数据库迁移
+
+直接在本机运行构建产物时：
 
 ```bash
 npm run typecheck
@@ -38,9 +106,11 @@ npm start
 
 构建仅输出源码到 `dist/`，入口为 `dist/server.js`。部署时同时保留 `db/`、`public/` 和 `prompts/` 资源目录。
 
-服务启动时自动执行待应用的数据库迁移；也可以预先独立运行 `npm run db:migrate`（开发环境）或 `npm run db:migrate:prod`（构建后）。已有数据库保留原有数据并补齐版本记录与索引。
+服务启动时自动执行待应用的数据库迁移；也可以预先独立运行 `npm run db:migrate`（源码环境）或 `npm run db:migrate:prod`（构建后）。已有数据库保留原有数据并补齐版本记录与索引。
 
-默认页面：`http://localhost:3000/reviews`
+线上 `docker run --env-file`、服务器配置文件、数据挂载及更新流程见 [线上部署说明](docs/deployment.md)，配置模板为 [deploy/production.env.example](deploy/production.env.example)。
+
+## Codex 运行参数
 
 Codex 模型参数：
 
@@ -62,6 +132,35 @@ CODEX_OUTPUT_SCHEMA=
 - `CODEX_PROFILE`：可选的 Codex 配置 profile。
 - `CODEX_EPHEMERAL`：默认 `true`，不保留 Codex 会话文件。
 - `CODEX_OUTPUT_SCHEMA`：可选 JSON Schema 文件路径，用于约束 Codex 最终输出。
+
+## API Key 与请求地址
+
+在 `.env` 中填写 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `CODEX_MODEL`，开发环境与 Docker Compose 都会读取这份配置：
+
+```env
+OPENAI_API_KEY=你的API密钥
+OPENAI_BASE_URL=https://api.openai.com/v1
+CODEX_MODEL=接口支持的模型名
+```
+
+使用 OpenAI 官方 API 时，`OPENAI_BASE_URL` 可留空（默认 `https://api.openai.com/v1`）；使用代理或自建兼容接口时，填写该服务的 API 基址，通常含 `/v1`，不要填写完整的 `/responses` 或 `/chat/completions` 路径。兼容服务需要支持 Responses API，模型名以该服务实际提供的名称为准。
+
+填写 Key 后，审核进程会显式使用这份 API 配置，不需要再执行 `codex login`，也不依赖容器中的历史登录状态。Key 只通过进程环境传递，不进入命令行参数。Key 和地址都留空时，继续使用原有 Codex 登录及 provider/profile 配置；单独填写自定义地址而不填写 Key 会在启动时报告缺少配置。
+
+配置修改后，本地重启 `npm run dev`；容器执行 `docker compose up -d --force-recreate`。如果同时更新了本次 API 配置功能的代码，需要先执行 `docker compose up -d --build`。
+
+### 可选：账号登录模式
+
+配置了 `.env` 中的 `OPENAI_API_KEY` 时，无需执行以下登录步骤。如果使用账号登录，将 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL` 都留空：本机运行模式使用本机 Codex 的登录和配置，容器模式需要单独完成设备登录。
+
+```bash
+# 仅账号登录模式需要；首次构建后执行
+docker compose run --rm --no-deps code-review codex login --device-auth
+```
+
+容器不会自动继承本机 Codex 的登录状态或自定义 provider/profile 配置。设备登录凭据保存在项目的 `codex-home` 命名卷中；登录模式下若使用自定义 provider/profile，需要在容器内的 `/root/.codex/config.toml` 配置对应项。API Key 模式直接读取 `.env`，无需手工编辑容器内配置。
+
+不要把凭据写入镜像或提交到仓库。`docker compose down` 保留数据目录和登录卷；`docker compose down -v` 会删除登录卷，账号登录模式需要重新登录。
 
 ## GitLab Webhook
 

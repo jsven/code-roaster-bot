@@ -1,0 +1,30 @@
+services:
+  code-review:
+    build:
+      context: .
+    image: code-review:local
+    init: true
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_PATH: /app/data/reviews.db
+      WORKSPACE_ROOT: /app/data/workspaces
+      CODEX_COMMAND: codex
+      CODEX_HOME: /root/.codex
+      CODEX_PROMPT_FILE: /app/prompts/code-review.md
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./data:/app/data
+      - codex-home:/root/.codex
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  codex-home:

@@ -5,6 +5,8 @@ import { renderReviewsPage } from '../views/reviews.js';
 import { reviewListOptions, reviewListQuerySchema, type ReviewListQuery } from '../schemas/review-list.js';
 
 export function registerReviewRoutes(app: FastifyInstance, queue: ReviewQueuePort): void {
+  app.get('/', async (_request, reply) => reply.redirect('/reviews'));
+
   app.get<{ Querystring: ReviewListQuery }>('/api/reviews', { schema: { querystring: reviewListQuerySchema } }, async (request, reply) => {
     return reply.send(queue.listPage(reviewListOptions(request.query)));
   });

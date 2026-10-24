@@ -14,6 +14,8 @@ export interface AppConfig {
     command: string;
     args: string[];
     model?: string;
+    apiKey?: string;
+    apiBaseUrl?: string;
     reasoningEffort: CodexReasoningEffort;
     sandbox: CodexSandbox;
     approvalPolicy: CodexApprovalPolicy;
@@ -86,6 +88,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const args = (env.CODEX_ARGS ?? 'exec').split(/\s+/).filter(Boolean);
   const feishuUrl = env.FEISHU_WEBHOOK_URL?.trim() || undefined;
   if (feishuEnabled && !feishuUrl) throw new Error('FEISHU_WEBHOOK_URL is required when FEISHU_ENABLED=true');
+  const apiKey = env.OPENAI_API_KEY?.trim() || undefined;
+  const apiBaseUrl = env.OPENAI_BASE_URL?.trim().replace(/\/+$/, '') || undefined;
+  if (apiBaseUrl && !apiKey) throw new Error('OPENAI_API_KEY is required when OPENAI_BASE_URL is set');
+  if (apiBaseUrl) {
+    let url: URL;
+    try { url = new URL(apiBaseUrl); } catch { throw new Error('OPENAI_BASE_URL must be an HTTP(S) URL'); }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      throw new Error('OPENAI_BASE_URL must be an HTTP(S) base URL without credentials, query, or fragment');
+    }
+  }
 
   return {
     server: {
@@ -103,6 +115,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       command: env.CODEX_COMMAND?.trim() || 'codex',
       args,
       model: env.CODEX_MODEL?.trim() || undefined,
+      apiKey,
+      apiBaseUrl,
       reasoningEffort: reasoningEffort(env.CODEX_REASONING_EFFORT?.trim()),
       sandbox: sandbox(env.CODEX_SANDBOX),
       approvalPolicy: approvalPolicy(env.CODEX_APPROVAL_POLICY),

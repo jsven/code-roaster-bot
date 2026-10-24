@@ -29,4 +29,35 @@ describe('loadConfig', () => {
     expect(config.codex.ephemeral).toBe(true);
     expect(config.codex.outputSchema).toContain('schema.json');
   });
+
+  it('loads explicit API credentials and normalizes the base URL', () => {
+    const config = loadConfig({
+      GITLAB_TOKEN: 'token', GITLAB_WEBHOOK_SECRET: 'secret',
+      OPENAI_API_KEY: ' test-key ', OPENAI_BASE_URL: ' https://gateway.example.com/v1/ ',
+    });
+    expect(config.codex.apiKey).toBe('test-key');
+    expect(config.codex.apiBaseUrl).toBe('https://gateway.example.com/v1');
+  });
+
+  it('preserves existing login behavior when API settings are blank', () => {
+    const config = loadConfig({
+      GITLAB_TOKEN: 'token', GITLAB_WEBHOOK_SECRET: 'secret', OPENAI_API_KEY: '', OPENAI_BASE_URL: '',
+    });
+    expect(config.codex.apiKey).toBeUndefined();
+    expect(config.codex.apiBaseUrl).toBeUndefined();
+  });
+
+  it('rejects a custom API URL without its credentials', () => {
+    expect(() => loadConfig({
+      GITLAB_TOKEN: 'token', GITLAB_WEBHOOK_SECRET: 'secret', OPENAI_BASE_URL: 'https://gateway.example.com/v1',
+    })).toThrow(/OPENAI_API_KEY/);
+  });
+
+  it.each(['invalid', 'file:///tmp/api', 'https://user:pass@example.com/v1', 'https://example.com/v1?key=secret', 'https://example.com/v1#fragment'])(
+    'rejects an invalid API base URL: %s', (baseUrl) => {
+      expect(() => loadConfig({
+        GITLAB_TOKEN: 'token', GITLAB_WEBHOOK_SECRET: 'secret', OPENAI_API_KEY: 'test-key', OPENAI_BASE_URL: baseUrl,
+      })).toThrow(/OPENAI_BASE_URL/);
+    },
+  );
 });
