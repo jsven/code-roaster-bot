@@ -4,6 +4,18 @@
 
 服务只负责审核和评论，不负责批准、阻断或判断是否允许合并。
 
+## 工程目录
+
+- `src/domain`：任务模型与审核结果规则。
+- `src/application`：审核编排、Worker 和外部依赖接口。
+- `src/infrastructure`：SQLite、GitLab、Codex、飞书和 Git 工作区实现。
+- `src/http`：路由、参数校验与页面渲染。
+- `src/bootstrap`、`src/config`、`src/cli`：依赖装配、配置、维护命令。
+- `db/migrations`：按版本维护的数据库结构 SQL；`public`：页面样式。
+- `test`：按模块职责组织的测试；`docs`：设计与维护文档。
+
+完整目录和依赖约定见 [工程目录规范](docs/project-structure.md)，数据库变更约定见 [数据库脚本规范](db/README.md)。
+
 ## 启动
 
 要求 Node.js 20+、Git、可执行的 `codex-cli` 和一个可访问 GitLab API 的 Token。
@@ -23,6 +35,10 @@ npm test
 npm run build
 npm start
 ```
+
+构建仅输出源码到 `dist/`，入口为 `dist/server.js`。部署时同时保留 `db/`、`public/` 和 `prompts/` 资源目录。
+
+服务启动时自动执行待应用的数据库迁移；也可以预先独立运行 `npm run db:migrate`（开发环境）或 `npm run db:migrate:prod`（构建后）。已有数据库保留原有数据并补齐版本记录与索引。
 
 默认页面：`http://localhost:3000/reviews`
 
@@ -57,6 +73,8 @@ https://<service-host>/webhooks/gitlab
 
 配置 Secret Token，填入 `.env` 的 `GITLAB_WEBHOOK_SECRET`，并只勾选 Merge request events。服务首期只接受 `object_attributes.action=open` 的 MR 创建事件，其它动作会返回 202 但不会入队。
 
+每次收到有效的 MR 创建消息，服务会在 Webhook 处理阶段立即向该 MR 评论「🤖⏳ 赛博老王 正在细品你的优雅代码」，无需等待 Worker、拉取仓库或 Codex 审核。该回复不做消息去重，审核完成后仍发布完整结果评论。即时回复失败不会阻止已入队的审核任务，Webhook 响应通过 `receiptCommentStatus` 返回 `succeeded` 或 `failed`。
+
 GitLab API Token 需要能够读取项目信息、读取仓库代码并创建 MR Note，推荐使用项目级或机器人账号的最小权限 Token（通常至少需要 `read_api`/`read_repository`，创建 Note 需要 API 写权限）。对于来自 Fork 的 MR，Token 还必须能读取 source project。
 
 ## Codex 提示词
@@ -86,6 +104,17 @@ SQLite 默认路径为 `data/reviews.db`，仅保存仓库、MR 地址、发起�
 - `GET /reviews/:id`：审核任务详情和重试按钮
 - `GET /health`：存活检查
 - `GET /ready`：就绪检查
+
+任务列表支持仓库、创建日期范围组合筛选，以及分页（默认每页 20 条，可选 50、100 条）。日期筛选和列表中的创建时间均使用北京时间（UTC+8），结束日期包含当天。翻页保留筛选条件，重新筛选时从第一页开始。
+
+`GET /api/reviews` 使用相同筛选条件，返回 `{ items, total, page, pageSize, totalPages }`（原先的直接数组改为分页对象）。查询参数：
+
+- `page`：页码，从 1 开始；超出总页数时返回最后一页。
+- `pageSize`：每页条数，默认 20，范围 1–100。
+- `repository`：完整仓库名，精确匹配，例如 `group/demo`。
+- `startDate`、`endDate`：可单独或组合使用，格式 `YYYY-MM-DD`，按任务创建日期筛选。
+
+例如：`/api/reviews?page=1&pageSize=20&repository=group%2Fdemo&startDate=2026-10-01&endDate=2026-10-24`。
 
 ## 安全注意事项
 
